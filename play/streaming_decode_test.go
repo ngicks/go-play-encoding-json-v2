@@ -58,7 +58,7 @@ func TestStreamingDecode(t *testing.T) {
 		t.Errorf("not equal:\nexpected(%#v)\n!=\nactual(%#v)", expected, decoded)
 	} else {
 		t.Logf("decoded = %#v", decoded)
-		// streaming_decode_test.go:59: decoded = []play.sample{play.sample{Foo:"foo1"}, play.sample{Foo:"foo2"}, play.sample{Foo:"foo3"}}
+		// streaming_decode_test.go:60: decoded = []play.sample{play.sample{Foo:"foo1"}, play.sample{Foo:"foo2"}, play.sample{Foo:"foo3"}}
 	}
 }
 
