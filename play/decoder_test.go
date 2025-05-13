@@ -92,9 +92,17 @@ func TestDecoder(t *testing.T) {
 			if err != nil && err != io.EOF {
 				panic(err)
 			}
-			if bytes.Equal(val, x) {
+			if !bytes.Equal(mustCompact(val), mustCompact(x)) {
 				t.Errorf("not equal: expected(%q) != actual(%q)", string(x), string(val))
 			}
 		}
 	}
+}
+
+func mustCompact(v jsontext.Value) jsontext.Value {
+	err := v.Compact()
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
