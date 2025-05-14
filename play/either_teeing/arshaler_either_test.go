@@ -117,8 +117,8 @@ func (r *bufReader) Stop(successful bool) {
 }
 
 var (
-	ErrStopped     = errors.New("stopped")
-	ErrFailedEarly = errors.New("failed early")
+	errStopped     = errors.New("stopped")
+	errFailedEarly = errors.New("failed early")
 )
 
 type panicErr struct{ v any }
@@ -180,9 +180,9 @@ func (r *teeReader) Stop(successful bool) {
 	}
 	r.closed = true
 
-	err := ErrFailedEarly
+	err := errFailedEarly
 	if successful {
-		err = ErrStopped
+		err = errStopped
 	}
 	r.r.CloseWithError(err)
 }
@@ -264,7 +264,7 @@ func TeeDecoder(dec *jsontext.Decoder, encOptions ...jsontext.Options) (l ReadCl
 		go func() {
 			defer wg.Done()
 			var err error
-			mw := &multiPipeWriter{ErrFailedEarly, pwl, pwr}
+			mw := &multiPipeWriter{errFailedEarly, pwl, pwr}
 			defer func() {
 				// it's possible that reading dec panicks
 				if rec := recover(); rec != nil {
