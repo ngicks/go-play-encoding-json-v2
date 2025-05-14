@@ -11,6 +11,7 @@ type A struct {
 	Foo string    `json:"foo,omitzero"`
 	Bar int       `json:"int,omitzero"`
 	T   time.Time `json:"t,omitzero,format:RFC3339"`
+	U   string    `json:"',\"'"`
 }
 
 func main() {
@@ -18,6 +19,7 @@ func main() {
 		Foo: "foo",
 		Bar: 123,
 		T:   time.Now(),
+		U:   "um",
 	}
 
 	bin, err := json.Marshal(a, jsontext.WithIndent("    "))
