@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+var ErrNotFound = errors.New("not found")
 
 func ReadJSONAt(dec *jsontext.Decoder, pointer jsontext.Pointer, read func(dec *jsontext.Decoder) error) (err error) {
 	lastToken := pointer.LastToken()
@@ -25,6 +28,7 @@ func ReadJSONAt(dec *jsontext.Decoder, pointer jsontext.Pointer, read func(dec *
 		}
 	}
 
+	currentDepth := 0
 	for {
 		_, err = dec.ReadToken()
 		if errors.Is(err, io.EOF) {
@@ -36,6 +40,9 @@ func ReadJSONAt(dec *jsontext.Decoder, pointer jsontext.Pointer, read func(dec *
 		p := dec.StackPointer()
 		if pointer == p {
 			if idx >= 0 {
+				if dec.PeekKind() != '[' {
+					return ErrNotFound
+				}
 				// skip '['
 				_, err = dec.ReadToken()
 				if err != nil {
@@ -48,10 +55,39 @@ func ReadJSONAt(dec *jsontext.Decoder, pointer jsontext.Pointer, read func(dec *
 					}
 				}
 			}
+			if dec.PeekKind() == ']' {
+				return ErrNotFound
+			}
 			return read(dec)
 		}
+		nextDepth := commonSegment(p, pointer)
+		if nextDepth < currentDepth {
+			// search depth should only increase
+			break
+		}
+		currentDepth = nextDepth
 	}
-	return nil
+	return ErrNotFound
+}
+
+func commonSegment(target, pointer jsontext.Pointer) int {
+	if pointer.Contains(target) {
+		return strings.Count(string(target), "/") + 1
+	}
+	next, stop := iter.Pull(target.Tokens())
+	defer stop()
+	common := 0
+	for p := range pointer.Tokens() {
+		t, ok := next()
+		if !ok {
+			break
+		}
+		if t != p {
+			break
+		}
+		common++
+	}
+	return common
 }
 
 func TestDecoder_Pointer(t *testing.T) {
@@ -73,33 +109,35 @@ func TestDecoder_Pointer(t *testing.T) {
 		expected   any
 	}
 	for _, tc := range []testCase{
-		{"/foo/bar/baz/qux", nil, nil},
 		{"/foo/bar", Baz{}, Baz{"baz"}},
 		{"/nay/0", Boo{}, Boo{"boo"}},
 		{"/nay/1", Bobo{}, Bobo{"bobo"}},
+		{"/yay/2", nil, nil},
+		{"/foo/bar/baz/qux", nil, nil},
+		{"/nay/2", nil, nil},
 	} {
-		found := false
-		err := ReadJSONAt(
-			jsontext.NewDecoder(bytes.NewBuffer(jsonBuf)),
-			tc.pointer,
-			func(dec *jsontext.Decoder) error {
-				found = true
-				return json.UnmarshalDecode(dec, &tc.readTarget)
-			},
-		)
-		if err != nil && err != io.EOF {
-			panic(err)
-		}
-		if !found {
-			if tc.readTarget != nil {
-				t.Errorf("not found: expected = %#v", tc.expected)
+		t.Run(string(tc.pointer), func(t *testing.T) {
+			err := ReadJSONAt(
+				jsontext.NewDecoder(bytes.NewBuffer(jsonBuf)),
+				tc.pointer,
+				func(dec *jsontext.Decoder) error {
+					return json.UnmarshalDecode(dec, &tc.readTarget)
+				},
+			)
+			if tc.readTarget == nil {
+				if err != ErrNotFound {
+					t.Errorf("should be ErrNotFound, but is %q", err)
+				}
+				return
 			}
-		} else {
+			if err != nil && err != io.EOF {
+				panic(err)
+			}
 			expected := fmt.Sprintf("%#v", tc.expected)
 			read := fmt.Sprintf("%#v", tc.readTarget)
 			if expected != read {
 				t.Errorf("read not as expected: expected(%q) != actual(%q)", expected, read)
 			}
-		}
+		})
 	}
 }

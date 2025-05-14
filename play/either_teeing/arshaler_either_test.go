@@ -134,6 +134,7 @@ func (e *Either[L, R]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 		}
 
 		errUnmarshalFailedEarly := errors.New("unmarshal failed early")
+		errLeftSuccessful := errors.New("left successful")
 		wg.Add(1)
 		go func() {
 			var err error
@@ -184,18 +185,26 @@ func (e *Either[L, R]) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 
 		wg.Add(1)
 		go func() {
+			closed := false
 			defer func() {
 				recoverStoreOnce()
+				if !closed {
+					prl.Close()
+				}
 				wg.Done()
 			}()
+
 			errL = json.UnmarshalRead(prl, &l, dec.Options())
 			if errL != nil { // successful = tokens are fully consumed
 				prl.CloseWithError(errUnmarshalFailedEarly)
+			} else { // If decoding left succeeded, right is no longer needed.
+				prr.CloseWithError(errLeftSuccessful)
 			}
+			closed = true
 		}()
 
 		errR = json.UnmarshalRead(prr, &r, dec.Options())
-		if errR != nil {
+		if errR != nil && !errors.Is(errR, errLeftSuccessful) {
 			prr.CloseWithError(errUnmarshalFailedEarly)
 		}
 
@@ -244,10 +253,10 @@ func TestArshalerEither(t *testing.T) {
 		}
 		t.Logf("err = %v", err)
 		/*
-		   arshaler_either_test.go:245: err = <nil>
-		   arshaler_either_test.go:245: err = <nil>
-		   arshaler_either_test.go:245: err = json: cannot unmarshal into Go play.Either[string,int]: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON boolean into Go string), r = (json: cannot unmarshal JSON boolean into Go int)
-		   arshaler_either_test.go:245: err = json: cannot unmarshal into Go play.Either[string,int] after offset 13: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON object into Go string), r = (json: cannot unmarshal JSON object into Go int)
+		   arshaler_either_test.go:254: err = <nil>
+		   arshaler_either_test.go:254: err = <nil>
+		   arshaler_either_test.go:254: err = json: cannot unmarshal into Go play.Either[string,int]: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON boolean into Go string), r = (json: cannot unmarshal JSON boolean into Go int)
+		   arshaler_either_test.go:254: err = json: cannot unmarshal into Go play.Either[string,int] after offset 13: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON object into Go string), r = (json: cannot unmarshal JSON object into Go int)
 		*/
 	}
 
@@ -277,23 +286,23 @@ func TestArshalerEither(t *testing.T) {
 			t.Logf("err = %v", err)
 			/*
 				=== RUN   TestArshalerEither/"foo"
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON string into Go play.sampleL), r = (json: cannot unmarshal JSON string into Go play.sampleR)
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON string into Go play.sampleL), r = (json: cannot unmarshal JSON string into Go play.sampleR)
 				=== RUN   TestArshalerEither/123
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON number into Go play.sampleL), r = (json: cannot unmarshal JSON number into Go play.sampleR)
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON number into Go play.sampleL), r = (json: cannot unmarshal JSON number into Go play.sampleR)
 				=== RUN   TestArshalerEither/false
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON boolean into Go play.sampleL), r = (json: cannot unmarshal JSON boolean into Go play.sampleR)
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON boolean into Go play.sampleL), r = (json: cannot unmarshal JSON boolean into Go play.sampleR)
 				=== RUN   TestArshalerEither/{"foo":_false}
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct after offset 13: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON string into Go play.sampleL: unknown object member name "foo"), r = (json: cannot unmarshal JSON string into Go play.sampleR: unknown object member name "foo")
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct after offset 13: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON string into Go play.sampleL: unknown object member name "foo"), r = (json: cannot unmarshal JSON string into Go play.sampleR: unknown object member name "foo")
 				=== RUN   TestArshalerEither/{"Foo":_false}
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct after offset 13: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON boolean into Go []int within "/Foo"), r = (json: cannot unmarshal JSON string into Go play.sampleR: unknown object member name "Foo")
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct after offset 13: Either[L, R]: unmarshal failed for both L and R: l = (json: cannot unmarshal JSON boolean into Go []int within "/Foo"), r = (json: cannot unmarshal JSON string into Go play.sampleR: unknown object member name "Foo")
 				=== RUN   TestArshalerEither/{"Foo":_[1,2,3]}
-				    arshaler_either_test.go:277: err = <nil>
+				    arshaler_either_test.go:286: err = <nil>
 				=== RUN   TestArshalerEither/{"Bar":_{"foo":"foofoo","bar":"barbar"}}
-				    arshaler_either_test.go:277: err = <nil>
+				    arshaler_either_test.go:286: err = <nil>
 				=== RUN   TestArshalerEither/{"Foo":_[1,2,3}
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct within "/Foo": Either[L, R]: unmarshal failed for both L and R: l = (jsontext: read error: jsontext: invalid character '}' after array element (expecting ',' or ']') within "/Foo" after offset 14), r = (json: cannot unmarshal JSON string into Go play.sampleR: unknown object member name "Foo")
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct within "/Foo": Either[L, R]: unmarshal failed for both L and R: l = (jsontext: read error: jsontext: invalid character '}' after array element (expecting ',' or ']') within "/Foo" after offset 14), r = (json: cannot unmarshal JSON string into Go play.sampleR: unknown object member name "Foo")
 				=== RUN   TestArshalerEither/{"Bar":_{"foo":}}
-				    arshaler_either_test.go:277: err = json: cannot unmarshal into Go struct within "/Bar/foo": Either[L, R]: unmarshal failed for both L and R: l = (jsontext: read error: jsontext: missing value after object name within "/Bar/foo" after offset 15), r = (jsontext: read error: jsontext: missing value after object name within "/Bar/foo" after offset 15)
+				    arshaler_either_test.go:286: err = json: cannot unmarshal into Go struct within "/Bar/foo": Either[L, R]: unmarshal failed for both L and R: l = (jsontext: read error: jsontext: missing value after object name within "/Bar/foo" after offset 15), r = (jsontext: read error: jsontext: missing value after object name within "/Bar/foo" after offset 15)
 			*/
 		})
 	}
