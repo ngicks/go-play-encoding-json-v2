@@ -84,7 +84,7 @@ func (e Either[L, R]) MarshalJSONTo(enc *jsontext.Encoder) error {
 
 type ReadCloseStopper interface {
 	io.ReadCloser
-	Stop(successful bool) // when called, stops both side of tee.
+	Stop(successful bool) // when called with true, stop tee-ing of both side. Otherwise stops the calling side.
 }
 
 type bufReader struct {
